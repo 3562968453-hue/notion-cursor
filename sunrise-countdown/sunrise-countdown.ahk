@@ -17,15 +17,19 @@ LyricFontName := "霞鹜文楷 轻便版 Medium"
 LyricFontItalic := 0
 LyricFontWeight := 500
 
-; Wallpaper mist plaque + 1.jfif sun arc
+; Wallpaper mist plaque + IronMan Time (Facon / orange-yellow)
 ColFill   := 0x62D6E8EE
 ColStroke := 0x55E0C97A
-ColOrange := 0xFFE08A32
+ColOrange := 0xFFF16624
+ColOrange2 := 0xFFFFDD18
 ColLav    := 0xFFB89AD8
 ColBlue   := 0xFF2A96D4
-ColInk    := 0xFF2A3844
+ColBlue2  := 0xFF7EC8F0
+ColInk    := 0xAAFFFFFF
 ColIvory  := 0xFFF7F4EE
 ColMuted  := 0xFF5C6B78
+FaconFam := 0
+pFaconColl := 0
 
 Cities := "
 (
@@ -98,9 +102,9 @@ SysGet, WA, MonitorWorkArea
 sysDpi := DllCall("user32\GetDpiForSystem", "UInt")
 if (sysDpi < 96)
     sysDpi := 96
-; refs/1.jfif is 1170x310 physical pixels
-GuiW := Round(1170 * sysDpi / 96)
-GuiH := Round(310 * sysDpi / 96)
+; Match desktop Rainmeter skin 专业团队 (409x230 physical)
+GuiW := Round(409 * sysDpi / 96)
+GuiH := Round(230 * sysDpi / 96)
 UiSW := GuiW / 360.0
 UiSH := GuiH / 168.0
 if (PosX = -1 || PosY = -1)
@@ -110,6 +114,7 @@ if (PosX = -1 || PosY = -1)
 }
 
 pToken := GdipStartup()
+LoadFaconFont()
 LoadLyricFont()
 Gui, +HwndGuiHwnd -Caption +ToolWindow +E0x80000 +LastFound
 Gui, Show, x%PosX% y%PosY% w%GuiW% h%GuiH% NA, 日出日落
@@ -335,6 +340,31 @@ GdipStartup()
     return token
 }
 
+LoadFaconFont()
+{
+    global FaconFam, pFaconColl
+    FaconFam := 0
+    pFaconColl := 0
+    DllCall("gdiplus\GdipNewPrivateFontCollection", "Ptr*", pFaconColl)
+    p1 := A_ScriptDir . "\runtime\Facon.ttf"
+    p2 := "D:\我的文档\Rainmeter\Skins\IronMan_Suite\@Resources\Fonts\Facon.ttf"
+    loaded := 0
+    if FileExist(p1)
+    {
+        if !DllCall("gdiplus\GdipPrivateAddFontFile", "Ptr", pFaconColl, "Str", p1)
+            loaded := 1
+    }
+    if (!loaded && FileExist(p2))
+    {
+        if !DllCall("gdiplus\GdipPrivateAddFontFile", "Ptr", pFaconColl, "Str", p2)
+            loaded := 1
+    }
+    if (loaded)
+        DllCall("gdiplus\GdipCreateFontFamilyFromName", "Str", "Facon", "Ptr", pFaconColl, "Ptr*", FaconFam)
+    if (!FaconFam)
+        DllCall("gdiplus\GdipCreateFontFamilyFromName", "Str", "Facon", "Ptr", 0, "Ptr*", FaconFam)
+}
+
 LoadLyricFont()
 {
     global KuGouIni, LyricFontName, LyricFontItalic, LyricFontWeight
@@ -404,9 +434,9 @@ DrawCard()
     DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bDot, "Float", sx - dDot, "Float", sy - dDot, "Float", dDot * 2, "Float", dDot * 2)
     DllCall("gdiplus\GdipDeleteBrush", "Ptr", bDot)
 
-    DrawText(G, cnt, 0, 62 * UiSH, w, 42 * UiSH, 26 * UiSH, ColInk, 1, 1)
-    DrawText(G, riseTxt, 22 * UiSW, 118 * UiSH, 120 * UiSW, 36 * UiSH, 24 * UiSH, ColOrange, 0, 1)
-    DrawText(G, setTxt, w - 142 * UiSW, 118 * UiSH, 120 * UiSW, 36 * UiSH, 24 * UiSH, ColBlue, 2, 1)
+    DrawEffectText(G, cnt, 0, 58 * UiSH, w, 48 * UiSH, 30 * UiSH, 1, 1)
+    DrawEffectText(G, riseTxt, 18 * UiSW, 116 * UiSH, 130 * UiSW, 40 * UiSH, 26 * UiSH, 0, 2)
+    DrawEffectText(G, setTxt, w - 148 * UiSW, 116 * UiSH, 130 * UiSW, 40 * UiSH, 26 * UiSH, 2, 3)
 
     DllCall("gdiplus\GdipCreateHBITMAPFromBitmap", "Ptr", pBmp, "Ptr*", hbm, "UInt", 0)
     hdc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
@@ -560,6 +590,60 @@ DrawText(G, str, x, y, w, h, size, argb, align, bold)
     DllCall("gdiplus\GdipDeleteStringFormat", "Ptr", fmt)
     DllCall("gdiplus\GdipDeleteFont", "Ptr", font)
     DllCall("gdiplus\GdipDeleteFontFamily", "Ptr", fam)
+}
+
+DrawEffectText(G, str, x, y, w, h, size, align, kind)
+{
+    global FaconFam, ColInk, ColOrange, ColOrange2, ColBlue, ColBlue2
+    fam := FaconFam
+    if (!fam)
+    {
+        if (kind = 1)
+            DrawText(G, str, x, y, w, h, size, ColInk, align, 1)
+        else if (kind = 2)
+            DrawText(G, str, x, y, w, h, size, ColOrange, align, 1)
+        else
+            DrawText(G, str, x, y, w, h, size, ColBlue, align, 1)
+        return
+    }
+    DllCall("gdiplus\GdipCreateStringFormat", "Int", 0, "Int", 0, "Ptr*", fmt)
+    DllCall("gdiplus\GdipSetStringFormatAlign", "Ptr", fmt, "Int", align)
+    DllCall("gdiplus\GdipSetStringFormatLineAlign", "Ptr", fmt, "Int", 1)
+    VarSetCapacity(rc, 16, 0)
+    NumPut(x, rc, 0, "Float"), NumPut(y, rc, 4, "Float")
+    NumPut(w, rc, 8, "Float"), NumPut(h, rc, 12, "Float")
+    DllCall("gdiplus\GdipCreatePath", "Int", 0, "Ptr*", pPath)
+    DllCall("gdiplus\GdipAddPathString", "Ptr", pPath, "Str", str, "Int", -1, "Ptr", fam, "Int", 0, "Float", size, "Ptr", &rc, "Ptr", fmt)
+    ; IronMan shadow
+    VarSetCapacity(rc2, 16, 0)
+    NumPut(x + 2, rc2, 0, "Float"), NumPut(y + 2, rc2, 4, "Float")
+    NumPut(w, rc2, 8, "Float"), NumPut(h, rc2, 12, "Float")
+    DllCall("gdiplus\GdipCreatePath", "Int", 0, "Ptr*", pSh)
+    DllCall("gdiplus\GdipAddPathString", "Ptr", pSh, "Str", str, "Int", -1, "Ptr", fam, "Int", 0, "Float", size, "Ptr", &rc2, "Ptr", fmt)
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", 0x96000000, "Ptr*", bSh)
+    DllCall("gdiplus\GdipFillPath", "Ptr", G, "Ptr", bSh, "Ptr", pSh)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", bSh)
+    DllCall("gdiplus\GdipDeletePath", "Ptr", pSh)
+    if (kind = 1)
+    {
+        DllCall("gdiplus\GdipCreateSolidFill", "UInt", ColInk, "Ptr*", br)
+    }
+    else
+    {
+        c1 := (kind = 2) ? ColOrange : ColBlue
+        c2 := (kind = 2) ? ColOrange2 : ColBlue2
+        VarSetCapacity(pt1, 8, 0)
+        NumPut(x, pt1, 0, "Float"), NumPut(y, pt1, 4, "Float")
+        VarSetCapacity(pt2, 8, 0)
+        NumPut(x, pt2, 0, "Float"), NumPut(y + h, pt2, 4, "Float")
+        DllCall("gdiplus\GdipCreateLineBrush", "Ptr", &pt1, "Ptr", &pt2, "UInt", c1, "UInt", c2, "Int", 0, "Ptr*", br)
+        if (!br)
+            DllCall("gdiplus\GdipCreateSolidFill", "UInt", c1, "Ptr*", br)
+    }
+    DllCall("gdiplus\GdipFillPath", "Ptr", G, "Ptr", br, "Ptr", pPath)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", br)
+    DllCall("gdiplus\GdipDeletePath", "Ptr", pPath)
+    DllCall("gdiplus\GdipDeleteStringFormat", "Ptr", fmt)
 }
 
 CalcSun()
