@@ -27,10 +27,9 @@ GDI+ 全部 `DllCall` 内联，不依赖 `Gdip_All.ahk`。主脚本不要换架�
 
 ## 每台电脑做一次
 
-1. 安装 AutoHotkey **v1.1 64 位**（`AutoHotkeyU64.exe`，不要 v2）
-2. 安装字体「霞鹜文楷 轻便版 Medium」
-3. 安装 Git，并对这个仓库有权限（GitHub 登录 / Credential Manager）
-4. clone 后进入本目录，双击 `install-task.bat`
+1. 安装 Git，并对这个仓库有权限（GitHub 登录 / Credential Manager）
+2. clone 后进入本目录，先双击 `install-deps.bat`（装 AutoHotkey v1.1.37.02 64 位便携版 + 字体「霞鹜文楷 轻便版 Medium」）
+3. 再双击 `install-task.bat`（注册计划任务；若还没装依赖，它会先跑 `install-deps`）
 
 ```bat
 cd /d %USERPROFILE%\src\notion-cursor\sunrise-countdown
@@ -59,8 +58,10 @@ install-task.bat -AhkExe "D:\路径\AutoHotkeyU64.exe"
 | `sunrise-countdown.ahk` | 主脚本（UTF-8 BOM），原样 |
 | `sunrise-countdown.ini.example` | 新电脑默认（北京、无窗口坐标） |
 | `sunrise-countdown.ini` | 本机生成，不同步 |
+| `install-deps.ps1` / `.bat` | 下载并安装 AHK v1.1.37.02 U64 + 霞鹜文楷轻便版 Medium |
 | `install-task.ps1` / `.bat` | 注册计划任务（登录 + 定时 pull） |
 | `update.ps1` / `.bat` | 立刻 git pull 并按需重启 |
+| `runtime/` | 本机下载的 AHK / 字体缓存，不同步 |
 | `config/sunrise-countdown.zhuanZ.ini` | 原机位置 `X=1560 Y=0` |
 | `config/日出日落倒计时.zhuanZ.xml` | 原机任务导出，仅对照 |
 | `config/KuGou-LyricConfigSection.ini` | 原机酷狗歌词字体键 |

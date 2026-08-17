@@ -13,6 +13,9 @@ $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $OverlayDir = $Here
 . (Join-Path $Here "common.ps1")
 
+Write-Host "Ensuring AutoHotkey v1.1 64-bit and font 霞鹜文楷 轻便版 Medium..."
+& (Join-Path $Here "install-deps.ps1")
+
 $ahkFile = Get-AhkPath
 if (-not (Test-Path -LiteralPath $ahkFile)) { throw "Missing $ahkFile" }
 Ensure-LocalIni | Out-Null

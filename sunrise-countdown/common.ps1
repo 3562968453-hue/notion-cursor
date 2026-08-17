@@ -60,6 +60,7 @@ function Find-AutoHotkeyU64 {
     }
 
     $candidates += @(
+        (Join-Path $OverlayDir "runtime\AutoHotkeyU64.exe"),
         "$env:ProgramFiles\AutoHotkey\AutoHotkeyU64.exe",
         "$env:ProgramFiles\AutoHotkey\v1.1.37.02\AutoHotkeyU64.exe",
         "${env:ProgramFiles(x86)}\AutoHotkey\AutoHotkeyU64.exe",
