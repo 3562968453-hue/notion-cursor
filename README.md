@@ -1,6 +1,6 @@
 # notion-cursor
 
-个人方案仓库。日出日落倒计时在 `sunrise-countdown/`。
+个人方案仓库。日出日落倒计时在 `sunrise-countdown/`，桌面 Rainmeter 组件在 `desktop-rainmeter/`。
 
 仓库：https://github.com/3562968453-hue/notion-cursor
 
@@ -33,6 +33,8 @@ install-task.bat
 4. 双击 `install-deps.bat`，再双击 `install-task.bat`
 
 这种方式不会自动更新，下次改方案要重新下载。
+
+桌面四块组件（专业团队、时钟、系统信息、周期表）在 clone 之后进入 `desktop-rainmeter`，双击 `install-desktop.bat`（需先安装 [Rainmeter](https://www.rainmeter.net/)）。
 
 ## 本机改完怎么上传
 
