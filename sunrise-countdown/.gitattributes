@@ -1,8 +1,13 @@
-sunrise-countdown.ahk text eol=lf
+﻿sunrise-countdown.ahk text eol=lf
+common.ps1 text eol=crlf
 install-task.ps1 text eol=crlf
+update.ps1 text eol=crlf
 install-task.bat text eol=crlf
+update.bat text eol=crlf
 README.md text eol=crlf
+.gitignore text eol=lf
 *.ini binary
+*.ini.example binary
 *.xml binary
 *.jfif binary
 *.png binary

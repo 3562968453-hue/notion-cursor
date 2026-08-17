@@ -1,89 +1,55 @@
 ﻿#requires -Version 5.1
-# Registers scheduled task "日出日落倒计时" (logon trigger).
+# Register scheduled task "日出日落倒计时".
+# Runs from THIS git clone (so cloud-agent pushes sync via git pull).
 # Does NOT use the Startup folder.
 param(
-    [string]$InstallDir = "",
     [string]$AhkExe = "",
+    [int]$SyncMinutes = 20,
     [switch]$SkipStart
 )
 
 $ErrorActionPreference = "Stop"
-$TaskName = "日出日落倒计时"
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
-if (-not $InstallDir) {
-    $InstallDir = Join-Path $env:USERPROFILE "Scripts"
-}
+$OverlayDir = $Here
+. (Join-Path $Here "common.ps1")
 
-function Find-AutoHotkeyU64 {
-    param([string]$Hint)
-    $candidates = @()
-    if ($Hint) { $candidates += $Hint }
-    if ($env:AUTOHOTKEY_U64) { $candidates += $env:AUTOHOTKEY_U64 }
-    $cmd = Get-Command "AutoHotkeyU64.exe" -ErrorAction SilentlyContinue
-    if ($cmd) { $candidates += $cmd.Source }
+$ahkFile = Get-AhkPath
+if (-not (Test-Path -LiteralPath $ahkFile)) { throw "Missing $ahkFile" }
+Ensure-LocalIni | Out-Null
 
-    $regPaths = @(
-        "HKLM:\SOFTWARE\AutoHotkey",
-        "HKLM:\SOFTWARE\WOW6432Node\AutoHotkey",
-        "HKCU:\SOFTWARE\AutoHotkey"
-    )
-    foreach ($rp in $regPaths) {
-        if (Test-Path $rp) {
-            $installDir = (Get-ItemProperty $rp -ErrorAction SilentlyContinue).InstallDir
-            if ($installDir) {
-                $candidates += (Join-Path $installDir "AutoHotkeyU64.exe")
-                $candidates += (Join-Path $installDir "v1.1.37.02\AutoHotkeyU64.exe")
-            }
-        }
-    }
-
-    $candidates += @(
-        "$env:ProgramFiles\AutoHotkey\AutoHotkeyU64.exe",
-        "$env:ProgramFiles\AutoHotkey\v1.1.37.02\AutoHotkeyU64.exe",
-        "${env:ProgramFiles(x86)}\AutoHotkey\AutoHotkeyU64.exe",
-        "D:\22-键盘快捷键2\软件\v1.1.37.02\AutoHotkeyU64.exe",
-        "D:\22-jianpankuaijiejian2\ruanjian\v1.1.37.02\AutoHotkeyU64.exe"
-    )
-
-    foreach ($p in $candidates) {
-        if ($p -and (Test-Path -LiteralPath $p)) { return (Resolve-Path -LiteralPath $p).Path }
-    }
-    return $null
-}
-
-Write-Host "Install dir: $InstallDir"
-New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-
-$srcAhk = Join-Path $Here "sunrise-countdown.ahk"
-$srcIni = Join-Path $Here "sunrise-countdown.ini"
-$dstAhk = Join-Path $InstallDir "sunrise-countdown.ahk"
-$dstIni = Join-Path $InstallDir "sunrise-countdown.ini"
-
-if (-not (Test-Path -LiteralPath $srcAhk)) {
-    throw "Missing $srcAhk"
-}
-
-Copy-Item -LiteralPath $srcAhk -Destination $dstAhk -Force
-if (Test-Path -LiteralPath $dstIni) {
-    Write-Host "Keep existing ini: $dstIni"
-} else {
-    Copy-Item -LiteralPath $srcIni -Destination $dstIni -Force
-    Write-Host "Wrote new-PC ini (city Beijing, no saved window pos): $dstIni"
-}
-
-$ahk = Find-AutoHotkeyU64 -Hint $AhkExe
-if (-not $ahk) {
+$exe = Find-AutoHotkeyU64 -Hint $AhkExe
+if (-not $exe) {
     throw @"
 AutoHotkeyU64.exe not found.
 Install AutoHotkey v1.1 64-bit, then re-run:
   .\install-task.ps1 -AhkExe 'C:\Path\To\AutoHotkeyU64.exe'
 "@
 }
-Write-Host "AutoHotkeyU64: $ahk"
+Write-MachineConfig -AhkExe $exe
+Write-Host "AutoHotkeyU64: $exe"
+Write-Host "Overlay dir (git clone): $Here"
 
-$arg = '"' + $dstAhk + '"'
-$action = New-ScheduledTaskAction -Execute $ahk -Argument $arg -WorkingDirectory $InstallDir
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$repo = Get-RepoRoot
+if ($repo) {
+    Write-Host "Repo root: $repo"
+} else {
+    Write-Host "WARNING: this folder is not inside a git clone. Multi-PC sync needs: git clone this GitHub repo, then run install-task here."
+}
+
+$updatePs1 = Join-Path $Here "update.ps1"
+$ps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+$arg = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$updatePs1`" -Start"
+$action = New-ScheduledTaskAction -Execute $ps -Argument $arg -WorkingDirectory $Here
+
+$triggers = @()
+$triggers += (New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME)
+if ($SyncMinutes -gt 0) {
+    $startAt = (Get-Date).AddMinutes(1)
+    $rep = New-ScheduledTaskTrigger -Once -At $startAt -RepetitionInterval (New-TimeSpan -Minutes $SyncMinutes) -RepetitionDuration ([TimeSpan]::FromDays(3650))
+    $triggers += $rep
+    Write-Host "Also pull every $SyncMinutes minutes."
+}
+
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
@@ -99,25 +65,17 @@ try { $settings.AllowHardTerminate = $false } catch { }
 Register-ScheduledTask `
     -TaskName $TaskName `
     -Action $action `
-    -Trigger $trigger `
+    -Trigger $triggers `
     -Principal $principal `
     -Settings $settings `
-    -Description "登录后立刻显示日出日落倒计时，不走启动文件夹排队。" `
+    -Description "登录后 git pull 再显示日出日落倒计时；不走启动文件夹。云端 Agent 改的是 GitHub，各台从 clone 拉取。" `
     -Force | Out-Null
 
 Write-Host "Scheduled task registered: $TaskName"
 
-Get-CimInstance Win32_Process -Filter "Name = 'AutoHotkeyU64.exe'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -and ($_.CommandLine -like "*sunrise-countdown.ahk*") } |
-    ForEach-Object {
-        Write-Host "Restarting existing sunrise-countdown instance (PID $($_.ProcessId))"
-        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-    }
-
 if (-not $SkipStart) {
-    Start-Process -FilePath $ahk -ArgumentList $arg -WorkingDirectory $InstallDir
-    Write-Host "Started overlay."
+    & $updatePs1 -Start -AhkExe $exe
 }
 
 Write-Host "Done. Startup folder was not used."
-Write-Host "Tray: city / always-on-top / exit. Hover for mist plaque."
+Write-Host "Each PC should git clone the same repo and run this installer once."
