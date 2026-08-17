@@ -37,4 +37,5 @@ install-task.bat
 ## 本机改完怎么上传
 
 在 Cursor 里打开 `C:\Users\anrui.wei\src\notion-cursor`，对 Agent 说「上传 xxx」。  
-不要提交 `sunrise-countdown.ini`、`runtime/`、`update.log`（本机位置、城市、AHK 安装文件，各电脑不同）。
+不要提交 `sunrise-countdown.ini`、`runtime/`、`update.log`（本机位置、城市、AHK 安装文件，各电脑不同）。  
+`fonts/Facon.ttf` 会随仓库一起同步，其他电脑 clone 后外观一致。

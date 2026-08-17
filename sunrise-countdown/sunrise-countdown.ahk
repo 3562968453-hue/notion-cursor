@@ -346,10 +346,16 @@ LoadFaconFont()
     FaconFam := 0
     pFaconColl := 0
     DllCall("gdiplus\GdipNewPrivateFontCollection", "Ptr*", pFaconColl)
+    pFonts := A_ScriptDir . "\fonts\Facon.ttf"
     p1 := A_ScriptDir . "\runtime\Facon.ttf"
     p2 := "D:\我的文档\Rainmeter\Skins\IronMan_Suite\@Resources\Fonts\Facon.ttf"
     loaded := 0
-    if FileExist(p1)
+    if FileExist(pFonts)
+    {
+        if !DllCall("gdiplus\GdipPrivateAddFontFile", "Ptr", pFaconColl, "Str", pFonts)
+            loaded := 1
+    }
+    if (!loaded && FileExist(p1))
     {
         if !DllCall("gdiplus\GdipPrivateAddFontFile", "Ptr", pFaconColl, "Str", p1)
             loaded := 1

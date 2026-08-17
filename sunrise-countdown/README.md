@@ -61,7 +61,7 @@ install-task.bat -AhkExe "D:\路径\AutoHotkeyU64.exe"
 | `install-deps.ps1` / `.bat` | 下载并安装 AHK v1.1.37.02 U64 + 霞鹜文楷轻便版 Medium |
 | `install-task.ps1` / `.bat` | 注册计划任务（登录 + 定时 pull） |
 | `update.ps1` / `.bat` | 立刻 git pull 并按需重启 |
-| `runtime/` | 本机下载的 AHK / 字体缓存，不同步 |
+| `fonts/Facon.ttf` | 钢铁侠倒计时用字，随仓库同步 |
 | `config/sunrise-countdown.zhuanZ.ini` | 原机位置 `X=1560 Y=0` |
 | `config/日出日落倒计时.zhuanZ.xml` | 原机任务导出，仅对照 |
 | `config/KuGou-LyricConfigSection.ini` | 原机酷狗歌词字体键 |
