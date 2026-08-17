@@ -25,7 +25,9 @@ ColOrange2 := 0xFFFFDD18
 ColLav    := 0xFFB89AD8
 ColBlue   := 0xFF2A96D4
 ColBlue2  := 0xFF7EC8F0
-ColInk    := 0xAAFFFFFF
+ColInk    := 0xFFF2F4F6
+ColCnt1   := 0xFFFFFFFF
+ColCnt2   := 0xFFC5CCD4
 ColIvory  := 0xFFF7F4EE
 ColMuted  := 0xFF5C6B78
 FaconFam := 0
@@ -66,9 +68,17 @@ IniRead, Lon, %INI%, Location, Lon, 116.4074
 IniRead, PosX, %INI%, Window, X, -1
 IniRead, PosY, %INI%, Window, Y, -1
 IniRead, PinTop, %INI%, Window, AlwaysOnTop, 0
+IniRead, UiScale, %INI%, Window, Scale, 1.0
+UiScale := UiScale + 0.0
+if (UiScale < 0.35)
+    UiScale := 0.35
+if (UiScale > 3.0)
+    UiScale := 3.0
+BaseW := 500
+BaseH := 280
 
 word := "距日落"
-cnt := "00:00:00"
+cnt := "00:00"
 riseTxt := "--:--"
 setTxt := "--:--"
 sunT := 0
@@ -102,11 +112,7 @@ SysGet, WA, MonitorWorkArea
 sysDpi := DllCall("user32\GetDpiForSystem", "UInt")
 if (sysDpi < 96)
     sysDpi := 96
-; Match desktop Rainmeter skin 专业团队 (409x230 physical)
-GuiW := Round(409 * sysDpi / 96)
-GuiH := Round(230 * sysDpi / 96)
-UiSW := GuiW / 360.0
-UiSH := GuiH / 168.0
+ApplyUiSize()
 if (PosX = -1 || PosY = -1)
 {
     PosX := WARight - GuiW - 28
@@ -120,11 +126,12 @@ Gui, +HwndGuiHwnd -Caption +ToolWindow +E0x80000 +LastFound
 Gui, Show, x%PosX% y%PosY% w%GuiW% h%GuiH% NA, 日出日落
 if (PinTop = 1)
     WinSet, AlwaysOnTop, On, ahk_id %GuiHwnd%
-rr := Round(GuiH * 0.38)
-hrgn := DllCall("gdi32\CreateRoundRectRgn", "Int", 0, "Int", 0, "Int", GuiW + 1, "Int", GuiH + 1, "Int", rr, "Int", rr, "Ptr")
-DllCall("user32\SetWindowRgn", "Ptr", GuiHwnd, "Ptr", hrgn, "Int", 1)
+ApplyCardRegion()
+WinGetPos, bootX, bootY,,, ahk_id %GuiHwnd%
+MagnetMove(bootX, bootY)
 
 OnMessage(0x201, "WM_LBUTTONDOWN")
+OnMessage(0x20A, "WM_MOUSEWHEEL")
 OnMessage(0x0232, "OnExitSizeMove")
 CalcSun()
 UpdateCount()
@@ -172,14 +179,78 @@ OnExitSizeMove()
     SaveWindowPos()
 }
 
+ApplyUiSize()
+{
+    global GuiW, GuiH, UiSW, UiSH, UiScale, sysDpi, BaseW, BaseH
+    GuiW := Round(BaseW * sysDpi / 96 * UiScale)
+    GuiH := Round(BaseH * sysDpi / 96 * UiScale)
+    if (GuiW < 160)
+        GuiW := 160
+    if (GuiH < 90)
+        GuiH := 90
+    UiSW := GuiW / BaseW
+    UiSH := GuiH / BaseH
+}
+
+WM_MOUSEWHEEL(wParam, lParam, msg, hwnd)
+{
+    global GuiHwnd, UiScale
+    if (hwnd != GuiHwnd)
+        return
+    wheel := (wParam >> 16) & 0xFFFF
+    if (wheel > 32767)
+        wheel -= 65536
+    if (wheel = 0)
+        return 0
+    if (wheel > 0)
+        SetOverlayScale(UiScale * 1.10)
+    else
+        SetOverlayScale(UiScale / 1.10)
+    return 0
+}
+
+SetOverlayScale(newScale)
+{
+    global GuiHwnd, GuiW, GuiH, UiScale, ScaleTick
+    now := A_TickCount
+    if (ScaleTick != "" && now - ScaleTick < 50)
+        return
+    if (newScale < 0.35)
+        newScale := 0.35
+    if (newScale > 3.0)
+        newScale := 3.0
+    if (Abs(newScale - UiScale) < 0.0005)
+        return
+    ScaleTick := now
+    WinGetPos, x, y, oldW, oldH, ahk_id %GuiHwnd%
+    if (oldW < 10)
+        oldW := GuiW
+    if (oldH < 10)
+        oldH := GuiH
+    cx := x + oldW // 2
+    cy := y + oldH // 2
+    UiScale := newScale
+    ApplyUiSize()
+    nx := cx - GuiW // 2
+    ny := cy - GuiH // 2
+    WinMove, ahk_id %GuiHwnd%,, %nx%, %ny%, %GuiW%, %GuiH%
+    MagnetMove(nx, ny)
+    DrawCard()
+    SaveWindowPos()
+}
+
 MagnetMove(nx, ny)
 {
     global GuiHwnd, GuiW, GuiH
+    WinGetPos, , , w, h, ahk_id %GuiHwnd%
+    if (w < 10)
+        w := GuiW
+    if (h < 10)
+        h := GuiH
     thresh := 36
-    cx := nx + GuiW // 2
-    cy := ny + GuiH // 2
-    GetWorkArea(cx, cy, L, T, R, B)
-    w := GuiW, h := GuiH
+    cx := nx + w // 2
+    cy := ny + h // 2
+    GetScreen(cx, cy, L, T, R, B)
     if (Abs(nx - L) <= thresh)
         nx := L
     else if (Abs((nx + w) - R) <= thresh)
@@ -188,15 +259,35 @@ MagnetMove(nx, ny)
         ny := T
     else if (Abs((ny + h) - B) <= thresh)
         ny := B - h
-    if (nx < L)
+    if (w > R - L)
         nx := L
-    if (ny < T)
-        ny := T
-    if (nx + w > R)
+    else if (nx < L)
+        nx := L
+    else if (nx + w > R)
         nx := R - w
-    if (ny + h > B)
+    if (h > B - T)
+        ny := T
+    else if (ny < T)
+        ny := T
+    else if (ny + h > B)
         ny := B - h
     WinMove, ahk_id %GuiHwnd%,, %nx%, %ny%
+}
+
+GetScreen(cx, cy, ByRef L, ByRef T, ByRef R, ByRef B)
+{
+    SysGet, cnt, MonitorCount
+    Loop, %cnt%
+    {
+        SysGet, Mon, Monitor, %A_Index%
+        if (cx >= MonLeft && cx < MonRight && cy >= MonTop && cy < MonBottom)
+        {
+            L := MonLeft, T := MonTop, R := MonRight, B := MonBottom
+            return
+        }
+    }
+    SysGet, Mon, Monitor
+    L := MonLeft, T := MonTop, R := MonRight, B := MonBottom
 }
 
 GetWorkArea(cx, cy, ByRef L, ByRef T, ByRef R, ByRef B)
@@ -217,22 +308,23 @@ GetWorkArea(cx, cy, ByRef L, ByRef T, ByRef R, ByRef B)
 
 SaveWindowPos()
 {
-    global GuiHwnd, INI
+    global GuiHwnd, INI, UiScale
     WinGetPos, x, y,,, ahk_id %GuiHwnd%
     if (x != "" && y != "")
     {
         IniWrite, %x%, %INI%, Window, X
         IniWrite, %y%, %INI%, Window, Y
     }
+    s := Round(UiScale * 100) / 100
+    IniWrite, %s%, %INI%, Window, Scale
 }
 
 CheckHover()
 {
     global GuiHwnd, HoverOn
     CoordMode, Mouse, Screen
-    MouseGetPos, mx, my
-    WinGetPos, x, y, w, h, ahk_id %GuiHwnd%
-    inside := (mx >= x && my >= y && mx < x + w && my < y + h)
+    MouseGetPos, mx, my, hwndUnder
+    inside := (hwndUnder = GuiHwnd)
     if GetKeyState("LButton", "P")
         inside := 1
     if (inside = HoverOn)
@@ -387,7 +479,7 @@ LoadLyricFont()
 DrawCard()
 {
     global GuiHwnd, GuiW, GuiH, UiSW, UiSH, ColFill, ColStroke, ColOrange, ColLav, ColBlue, ColInk, word, cnt, riseTxt, setTxt, sunT, BgFade
-    w := GuiW, h := GuiH, r := h * 0.36
+    w := GuiW, h := GuiH
 
     DllCall("gdiplus\GdipCreateBitmapFromScan0", "Int", w, "Int", h, "Int", 0, "Int", 0xE200B, "Ptr", 0, "Ptr*", pBmp)
     DllCall("gdiplus\GdipGetImageGraphicsContext", "Ptr", pBmp, "Ptr*", G)
@@ -395,33 +487,18 @@ DrawCard()
     DllCall("gdiplus\GdipSetSmoothingMode", "Ptr", G, "Int", 4)
     DllCall("gdiplus\GdipSetTextRenderingHint", "Ptr", G, "Int", 4)
 
-    pPath := RoundPath(1.0, 1.0, w - 2.0, h - 2.0, r)
-    fill := MixBgFill(BgFade)
-    DllCall("gdiplus\GdipCreateSolidFill", "UInt", fill, "Ptr*", pBrush)
-    DllCall("gdiplus\GdipFillPath", "Ptr", G, "Ptr", pBrush, "Ptr", pPath)
-    DllCall("gdiplus\GdipDeleteBrush", "Ptr", pBrush)
-    if (BgFade > 0.02)
-    {
-        sa := Round(((ColStroke >> 24) & 255) * BgFade)
-        if (sa < 1)
-            sa := 1
-        DllCall("gdiplus\GdipCreatePen1", "UInt", GlowColor(ColStroke, sa), "Float", 1.4 * UiSH, "Int", 2, "Ptr*", pEdge)
-        DllCall("gdiplus\GdipDrawPath", "Ptr", G, "Ptr", pEdge, "Ptr", pPath)
-        DllCall("gdiplus\GdipDeletePen", "Ptr", pEdge)
-    }
-    DllCall("gdiplus\GdipDeletePath", "Ptr", pPath)
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", 0x0CFFFFFF, "Ptr*", bHit)
+    DllCall("gdiplus\GdipFillRectangle", "Ptr", G, "Ptr", bHit, "Float", 0.0, "Float", 0.0, "Float", w, "Float", h)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", bHit)
 
-    DrawSunIcon(G, 28.0 * UiSW, 24.0 * UiSH, ColOrange)
-    DrawMoonIcon(G, w - 28.0 * UiSW, 24.0 * UiSH, ColBlue)
-
-    cx := w / 2.0
-    rArc := 236.0 * UiSW
-    cy := 42.0 * UiSH + rArc
+    cx := w * 0.5
     a0 := 232.0
     a1 := 308.0
-    DrawSunArc(G, cx, cy, rArc, a0, a1, 8.0 * UiSH, 0.16)
-    DrawSunArc(G, cx, cy, rArc, a0, a1, 3.2 * UiSH, 1.0)
-
+    rArc := w * 0.58
+    arcPeak := h * 0.07
+    arcCy := arcPeak + rArc
+    DrawSunArc(G, cx, arcCy, rArc, a0, a1, w * 0.011, 0.16)
+    DrawSunArc(G, cx, arcCy, rArc, a0, a1, w * 0.0044, 1.0)
     t := sunT
     if (t < 0)
         t := 0
@@ -429,20 +506,26 @@ DrawCard()
         t := 1
     ang := (a0 + (a1 - a0) * t) * 0.0174532925199433
     sx := cx + rArc * Cos(ang)
-    sy := cy + rArc * Sin(ang)
+    sy := arcCy + rArc * Sin(ang)
     colDot := ArcColor(t)
-    dGlow := 9.0 * UiSH
-    dDot := 4.2 * UiSH
+    dGlow := w * 0.014
+    dDot := w * 0.006
     DllCall("gdiplus\GdipCreateSolidFill", "UInt", GlowColor(colDot, 0x55), "Ptr*", bGlow)
     DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bGlow, "Float", sx - dGlow, "Float", sy - dGlow, "Float", dGlow * 2, "Float", dGlow * 2)
     DllCall("gdiplus\GdipDeleteBrush", "Ptr", bGlow)
     DllCall("gdiplus\GdipCreateSolidFill", "UInt", colDot, "Ptr*", bDot)
     DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bDot, "Float", sx - dDot, "Float", sy - dDot, "Float", dDot * 2, "Float", dDot * 2)
     DllCall("gdiplus\GdipDeleteBrush", "Ptr", bDot)
+    iconS := 0.92
+    iconLift := h * 0.07
+    rad0 := a0 * 0.0174532925199433
+    rad1 := a1 * 0.0174532925199433
+    DrawSunIcon(G, cx + (rArc + iconLift) * Cos(rad0), arcCy + (rArc + iconLift) * Sin(rad0), ColOrange, iconS)
+    DrawMoonIcon(G, cx + (rArc + iconLift) * Cos(rad1), arcCy + (rArc + iconLift) * Sin(rad1), ColBlue, iconS)
 
-    DrawEffectText(G, cnt, 0, 58 * UiSH, w, 48 * UiSH, 30 * UiSH, 1, 1)
-    DrawEffectText(G, riseTxt, 18 * UiSW, 116 * UiSH, 130 * UiSW, 40 * UiSH, 26 * UiSH, 0, 2)
-    DrawEffectText(G, setTxt, w - 148 * UiSW, 116 * UiSH, 130 * UiSW, 40 * UiSH, 26 * UiSH, 2, 3)
+    DrawEffectText(G, cnt, w * 0.04, h * 0.26, w * 0.92, h * 0.20, h * 0.175, 1, 1)
+    DrawEffectText(G, riseTxt, w * 0.06, h * 0.44, w * 0.40, h * 0.15, h * 0.105, 1, 2)
+    DrawEffectText(G, setTxt, w * 0.54, h * 0.44, w * 0.40, h * 0.15, h * 0.105, 1, 3)
 
     DllCall("gdiplus\GdipCreateHBITMAPFromBitmap", "Ptr", pBmp, "Ptr*", hbm, "UInt", 0)
     hdc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
@@ -463,10 +546,10 @@ DrawCard()
     DllCall("gdiplus\GdipDisposeImage", "Ptr", pBmp)
 }
 
-DrawSunIcon(G, cx, cy, col)
+DrawSunIcon(G, cx, cy, col, s)
 {
-    global UiSH
-    s := UiSH
+    if (s = "")
+        s := 2.2
     DllCall("gdiplus\GdipCreateSolidFill", "UInt", GlowColor(col, 0x50), "Ptr*", bGlow)
     DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bGlow, "Float", cx - 11 * s, "Float", cy - 11 * s, "Float", 22 * s, "Float", 22 * s)
     DllCall("gdiplus\GdipDeleteBrush", "Ptr", bGlow)
@@ -486,10 +569,10 @@ DrawSunIcon(G, cx, cy, col)
     DllCall("gdiplus\GdipDeletePen", "Ptr", pPen)
 }
 
-DrawMoonIcon(G, cx, cy, col)
+DrawMoonIcon(G, cx, cy, col, s)
 {
-    global UiSH
-    s := UiSH
+    if (s = "")
+        s := 2.2
     d := 14.0 * s
     x := cx - d / 2.0
     y := cy - d / 2.0
@@ -559,16 +642,190 @@ GlowColor(c, a)
     return (a << 24) | (r << 16) | (g << 8) | b
 }
 
-RoundPath(x, y, w, h, r)
+DesatColor(c, cut)
 {
+    if (cut < 0)
+        cut := 0
+    if (cut > 1)
+        cut := 1
+    a := (c >> 24) & 255
+    r := (c >> 16) & 255
+    g := (c >> 8) & 255
+    b := c & 255
+    y := 0.299 * r + 0.587 * g + 0.114 * b
+    r := Round(r + (y - r) * cut)
+    g := Round(g + (y - g) * cut)
+    b := Round(b + (y - b) * cut)
+    return (a << 24) | (r << 16) | (g << 8) | b
+}
+
+ATan2(y, x)
+{
+    global PI
+    if (x > 0)
+        return ATan(y / x)
+    if (x < 0)
+    {
+        if (y >= 0)
+            return ATan(y / x) + PI
+        return ATan(y / x) - PI
+    }
+    if (y > 0)
+        return PI / 2.0
+    if (y < 0)
+        return -PI / 2.0
+    return 0.0
+}
+
+CatPt(cx, cy, rx, ry, deg, ByRef ox, ByRef oy)
+{
+    global PI
+    rad := deg * PI / 180.0
+    ox := cx + rx * Cos(rad)
+    oy := cy + ry * Sin(rad)
+}
+
+CatGeom(bw, bh, ByRef cx, ByRef cy, ByRef rx, ByRef ry)
+{
+    pad := 3.0
+    earLift := 1.12
+    chin := 1.08
+    ry := (bh - pad * 2.0) / (earLift + chin)
+    rx := (bw - pad * 2.0) / 2.0
+    cx := bw * 0.5
+    cy := pad + ry * earLift
+}
+
+CatPath(x, y, bw, bh)
+{
+    CatGeom(bw, bh, cx, cy, rx, ry)
+    cx := cx + x
+    cy := cy + y
+    aLO := 208.0
+    aLI := 244.0
+    aRI := 296.0
+    aRO := 332.0
+    CatPt(cx, cy, rx, ry, aLO, xLO, yLO)
+    CatPt(cx, cy, rx, ry, aLI, xLI, yLI)
+    CatPt(cx, cy, rx, ry, aRI, xRI, yRI)
+    CatPt(cx, cy, rx, ry, aRO, xRO, yRO)
+    tipY := cy - ry * 1.14
+    if (tipY < y + 2.0)
+        tipY := y + 2.0
+    xLT := cx - rx * 0.34
+    xRT := cx + rx * 0.34
+    rOff := ry * 0.28
     DllCall("gdiplus\GdipCreatePath", "Int", 0, "Ptr*", pPath)
-    d := r * 2
-    DllCall("gdiplus\GdipAddPathArc", "Ptr", pPath, "Float", x, "Float", y, "Float", d, "Float", d, "Float", 180, "Float", 90)
-    DllCall("gdiplus\GdipAddPathArc", "Ptr", pPath, "Float", x + w - d, "Float", y, "Float", d, "Float", d, "Float", 270, "Float", 90)
-    DllCall("gdiplus\GdipAddPathArc", "Ptr", pPath, "Float", x + w - d, "Float", y + h - d, "Float", d, "Float", d, "Float", 0, "Float", 90)
-    DllCall("gdiplus\GdipAddPathArc", "Ptr", pPath, "Float", x, "Float", y + h - d, "Float", d, "Float", d, "Float", 90, "Float", 90)
+    DllCall("gdiplus\GdipAddPathBezier", "Ptr", pPath, "Float", xLO, "Float", yLO, "Float", xLT - rOff, "Float", tipY + rOff, "Float", xLT + rOff * 0.45, "Float", tipY + rx * 0.04, "Float", xLI, "Float", yLI)
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", pPath, "Float", cx - rx, "Float", cy - ry, "Float", rx * 2.0, "Float", ry * 2.0, "Float", aLI, "Float", aRI - aLI)
+    DllCall("gdiplus\GdipAddPathBezier", "Ptr", pPath, "Float", xRI, "Float", yRI, "Float", xRT - rOff * 0.45, "Float", tipY + rx * 0.04, "Float", xRT + rOff, "Float", tipY + rOff, "Float", xRO, "Float", yRO)
+    sweep := aLO + 360.0 - aRO
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", pPath, "Float", cx - rx, "Float", cy - ry, "Float", rx * 2.0, "Float", ry * 2.0, "Float", aRO, "Float", sweep)
     DllCall("gdiplus\GdipClosePathFigure", "Ptr", pPath)
     return pPath
+}
+
+DrawCatFaceExtras(G, cx, cy, rx, ry, fade)
+{
+    global ColStroke, ColOrange
+    if (fade < 0.03)
+        return
+    aEar := Round(120 * fade)
+    aBlush := Round(78 * fade)
+    aNose := Round(170 * fade)
+    aLine := Round(175 * fade)
+    aPaw := Round(95 * fade)
+    tipY := cy - ry * 1.12
+    xLT := cx - rx * 0.34
+    xRT := cx + rx * 0.34
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", GlowColor(0xFFFFB7C5, aEar), "Ptr*", bEar)
+    DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bEar, "Float", xLT - ry * 0.12, "Float", tipY + ry * 0.22, "Float", ry * 0.28, "Float", ry * 0.32)
+    DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bEar, "Float", xRT - ry * 0.16, "Float", tipY + ry * 0.22, "Float", ry * 0.28, "Float", ry * 0.32)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", bEar)
+    bw := rx * 0.11
+    bh := ry * 0.11
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", GlowColor(0xFFFF8FA3, aBlush), "Ptr*", bBl)
+    DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bBl, "Float", cx - rx * 0.52, "Float", cy + ry * 0.02, "Float", bw, "Float", bh)
+    DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bBl, "Float", cx + rx * 0.41, "Float", cy + ry * 0.02, "Float", bw, "Float", bh)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", bBl)
+    nw := ry * 0.10
+    nh := ry * 0.07
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", GlowColor(0xFFFF8FAB, aNose), "Ptr*", bN)
+    DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bN, "Float", cx - nw / 2.0, "Float", cy - nh * 0.15, "Float", nw, "Float", nh)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", bN)
+    DllCall("gdiplus\GdipCreatePen1", "UInt", GlowColor(ColStroke, aLine), "Float", ry * 0.016, "Int", 2, "Ptr*", pW)
+    DllCall("gdiplus\GdipSetPenStartCap", "Ptr", pW, "Int", 2)
+    DllCall("gdiplus\GdipSetPenEndCap", "Ptr", pW, "Int", 2)
+    nx0 := cx - nw * 0.85
+    ny0 := cy + nh * 0.40
+    DllCall("gdiplus\GdipDrawLine", "Ptr", G, "Ptr", pW, "Float", nx0, "Float", ny0 - ry * 0.03, "Float", cx - rx * 0.78, "Float", cy - ry * 0.16)
+    DllCall("gdiplus\GdipDrawLine", "Ptr", G, "Ptr", pW, "Float", nx0, "Float", ny0, "Float", cx - rx * 0.84, "Float", cy + ry * 0.04)
+    DllCall("gdiplus\GdipDrawLine", "Ptr", G, "Ptr", pW, "Float", nx0, "Float", ny0 + ry * 0.03, "Float", cx - rx * 0.74, "Float", cy + ry * 0.22)
+    nx1 := cx + nw * 0.85
+    DllCall("gdiplus\GdipDrawLine", "Ptr", G, "Ptr", pW, "Float", nx1, "Float", ny0 - ry * 0.03, "Float", cx + rx * 0.78, "Float", cy - ry * 0.16)
+    DllCall("gdiplus\GdipDrawLine", "Ptr", G, "Ptr", pW, "Float", nx1, "Float", ny0, "Float", cx + rx * 0.84, "Float", cy + ry * 0.04)
+    DllCall("gdiplus\GdipDrawLine", "Ptr", G, "Ptr", pW, "Float", nx1, "Float", ny0 + ry * 0.03, "Float", cx + rx * 0.74, "Float", cy + ry * 0.22)
+    DllCall("gdiplus\GdipDrawArc", "Ptr", G, "Ptr", pW, "Float", cx - ry * 0.08, "Float", cy + nh * 0.55, "Float", ry * 0.16, "Float", ry * 0.12, "Float", 20.0, "Float", 140.0)
+    DllCall("gdiplus\GdipDeletePen", "Ptr", pW)
+    DllCall("gdiplus\GdipCreatePen1", "UInt", GlowColor(ColOrange, aLine), "Float", ry * 0.038, "Int", 2, "Ptr*", pC)
+    DllCall("gdiplus\GdipSetPenStartCap", "Ptr", pC, "Int", 2)
+    DllCall("gdiplus\GdipSetPenEndCap", "Ptr", pC, "Int", 2)
+    DllCall("gdiplus\GdipDrawArc", "Ptr", G, "Ptr", pC, "Float", cx - rx * 0.18, "Float", cy + ry * 0.72, "Float", rx * 0.36, "Float", ry * 0.28, "Float", 18.0, "Float", 144.0)
+    DllCall("gdiplus\GdipDeletePen", "Ptr", pC)
+    bell := ry * 0.10
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", GlowColor(ColOrange, aNose), "Ptr*", bBell)
+    DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bBell, "Float", cx - bell / 2.0, "Float", cy + ry * 0.88, "Float", bell, "Float", bell)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", bBell)
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", GlowColor(0xFFFFE08A, Round(200 * fade)), "Ptr*", bDot)
+    DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bDot, "Float", cx - bell * 0.16, "Float", cy + ry * 0.90, "Float", bell * 0.32, "Float", bell * 0.32)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", bDot)
+    pw := ry * 0.22
+    ph := ry * 0.16
+    py := cy + ry * 0.86
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", GlowColor(0xFFFFB7C5, aPaw), "Ptr*", bPaw)
+    DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bPaw, "Float", cx - rx * 0.72, "Float", py, "Float", pw, "Float", ph)
+    DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bPaw, "Float", cx + rx * 0.72 - pw, "Float", py, "Float", pw, "Float", ph)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", bPaw)
+    bean := ry * 0.035
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", GlowColor(0xFFFF8FA3, aPaw + 20), "Ptr*", bBean)
+    Loop, 3
+    {
+        bx := cx - rx * 0.72 + pw * 0.18 + (A_Index - 1) * pw * 0.26
+        DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bBean, "Float", bx, "Float", py + ph * 0.22, "Float", bean, "Float", bean * 1.15)
+        bx2 := cx + rx * 0.72 - pw + pw * 0.18 + (A_Index - 1) * pw * 0.26
+        DllCall("gdiplus\GdipFillEllipse", "Ptr", G, "Ptr", bBean, "Float", bx2, "Float", py + ph * 0.22, "Float", bean, "Float", bean * 1.15)
+    }
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", bBean)
+}
+
+DrawCuteText(G, str, x, y, w, h, size, argb, align)
+{
+    global LyricFontName
+    fam := 0
+    DllCall("gdiplus\GdipCreateFontFamilyFromName", "Str", LyricFontName, "Ptr", 0, "Ptr*", fam)
+    if (!fam)
+        DllCall("gdiplus\GdipCreateFontFamilyFromName", "Str", "微软雅黑", "Ptr", 0, "Ptr*", fam)
+    if (!fam)
+        DllCall("gdiplus\GdipCreateFontFamilyFromName", "Str", "Segoe UI", "Ptr", 0, "Ptr*", fam)
+    DllCall("gdiplus\GdipCreateFont", "Ptr", fam, "Float", size, "Int", 1, "Int", 2, "Ptr*", font)
+    DllCall("gdiplus\GdipCreateStringFormat", "Int", 0, "Int", 0, "Ptr*", fmt)
+    DllCall("gdiplus\GdipSetStringFormatAlign", "Ptr", fmt, "Int", align)
+    DllCall("gdiplus\GdipSetStringFormatLineAlign", "Ptr", fmt, "Int", 1)
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", argb, "Ptr*", br)
+    VarSetCapacity(rc, 16, 0)
+    NumPut(x, rc, 0, "Float"), NumPut(y, rc, 4, "Float")
+    NumPut(w, rc, 8, "Float"), NumPut(h, rc, 12, "Float")
+    DllCall("gdiplus\GdipDrawString", "Ptr", G, "Str", str, "Int", -1, "Ptr", font, "Ptr", &rc, "Ptr", fmt, "Ptr", br)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", br)
+    DllCall("gdiplus\GdipDeleteStringFormat", "Ptr", fmt)
+    DllCall("gdiplus\GdipDeleteFont", "Ptr", font)
+    DllCall("gdiplus\GdipDeleteFontFamily", "Ptr", fam)
+}
+
+ApplyCardRegion()
+{
+    global GuiHwnd
+    DllCall("user32\SetWindowRgn", "Ptr", GuiHwnd, "Ptr", 0, "Int", 1)
 }
 
 DrawText(G, str, x, y, w, h, size, argb, align, bold)
@@ -600,7 +857,7 @@ DrawText(G, str, x, y, w, h, size, argb, align, bold)
 
 DrawEffectText(G, str, x, y, w, h, size, align, kind)
 {
-    global FaconFam, ColInk, ColOrange, ColOrange2, ColBlue, ColBlue2
+    global FaconFam, ColInk, ColOrange, ColOrange2, ColBlue, ColBlue2, ColCnt1, ColCnt2, sunT
     fam := FaconFam
     if (!fam)
     {
@@ -626,25 +883,54 @@ DrawEffectText(G, str, x, y, w, h, size, align, kind)
     NumPut(w, rc2, 8, "Float"), NumPut(h, rc2, 12, "Float")
     DllCall("gdiplus\GdipCreatePath", "Int", 0, "Ptr*", pSh)
     DllCall("gdiplus\GdipAddPathString", "Ptr", pSh, "Str", str, "Int", -1, "Ptr", fam, "Int", 0, "Float", size, "Ptr", &rc2, "Ptr", fmt)
-    DllCall("gdiplus\GdipCreateSolidFill", "UInt", 0x96000000, "Ptr*", bSh)
+    sh := (kind = 1) ? 0x59485058 : 0x96000000
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", sh, "Ptr*", bSh)
     DllCall("gdiplus\GdipFillPath", "Ptr", G, "Ptr", bSh, "Ptr", pSh)
     DllCall("gdiplus\GdipDeleteBrush", "Ptr", bSh)
     DllCall("gdiplus\GdipDeletePath", "Ptr", pSh)
     if (kind = 1)
     {
-        DllCall("gdiplus\GdipCreateSolidFill", "UInt", ColInk, "Ptr*", br)
+        VarSetCapacity(rcHi, 16, 0)
+        NumPut(x - 1, rcHi, 0, "Float"), NumPut(y - 1, rcHi, 4, "Float")
+        NumPut(w, rcHi, 8, "Float"), NumPut(h, rcHi, 12, "Float")
+        DllCall("gdiplus\GdipCreatePath", "Int", 0, "Ptr*", pHi)
+        DllCall("gdiplus\GdipAddPathString", "Ptr", pHi, "Str", str, "Int", -1, "Ptr", fam, "Int", 0, "Float", size, "Ptr", &rcHi, "Ptr", fmt)
+        DllCall("gdiplus\GdipCreateSolidFill", "UInt", 0xD8FFFFFF, "Ptr*", bHi)
+        DllCall("gdiplus\GdipFillPath", "Ptr", G, "Ptr", bHi, "Ptr", pHi)
+        DllCall("gdiplus\GdipDeleteBrush", "Ptr", bHi)
+        DllCall("gdiplus\GdipDeletePath", "Ptr", pHi)
+        c1 := ColCnt1
+        c2 := ColCnt2
     }
     else
     {
         c1 := (kind = 2) ? ColOrange : ColBlue
         c2 := (kind = 2) ? ColOrange2 : ColBlue2
-        VarSetCapacity(pt1, 8, 0)
-        NumPut(x, pt1, 0, "Float"), NumPut(y, pt1, 4, "Float")
-        VarSetCapacity(pt2, 8, 0)
-        NumPut(x, pt2, 0, "Float"), NumPut(y + h, pt2, 4, "Float")
-        DllCall("gdiplus\GdipCreateLineBrush", "Ptr", &pt1, "Ptr", &pt2, "UInt", c1, "UInt", c2, "Int", 0, "Ptr*", br)
-        if (!br)
-            DllCall("gdiplus\GdipCreateSolidFill", "UInt", c1, "Ptr*", br)
+    }
+    VarSetCapacity(pt1, 8, 0)
+    NumPut(x, pt1, 0, "Float"), NumPut(y, pt1, 4, "Float")
+    VarSetCapacity(pt2, 8, 0)
+    NumPut(x, pt2, 0, "Float"), NumPut(y + h, pt2, 4, "Float")
+    DllCall("gdiplus\GdipCreateLineBrush", "Ptr", &pt1, "Ptr", &pt2, "UInt", c1, "UInt", c2, "Int", 0, "Ptr*", br)
+    if (!br)
+        DllCall("gdiplus\GdipCreateSolidFill", "UInt", c1, "Ptr*", br)
+    if (kind = 1)
+    {
+        tStroke := sunT
+        if (tStroke < 0)
+            tStroke := 0
+        if (tStroke > 1)
+            tStroke := 1
+        colOut := GlowColor(DesatColor(ArcColor(tStroke), 0.4), 255)
+        pw := size * 0.09
+        if (pw < 2.0)
+            pw := 2.0
+        DllCall("gdiplus\GdipCreatePen1", "UInt", colOut, "Float", pw, "Int", 2, "Ptr*", pOut)
+        DllCall("gdiplus\GdipSetPenLineJoin", "Ptr", pOut, "Int", 2)
+        DllCall("gdiplus\GdipSetPenStartCap", "Ptr", pOut, "Int", 2)
+        DllCall("gdiplus\GdipSetPenEndCap", "Ptr", pOut, "Int", 2)
+        DllCall("gdiplus\GdipDrawPath", "Ptr", G, "Ptr", pOut, "Ptr", pPath)
+        DllCall("gdiplus\GdipDeletePen", "Ptr", pOut)
     }
     DllCall("gdiplus\GdipFillPath", "Ptr", G, "Ptr", br, "Ptr", pPath)
     DllCall("gdiplus\GdipDeleteBrush", "Ptr", br)
@@ -741,8 +1027,7 @@ UpdateCount()
     }
     hh := left // 3600
     mm := Mod(left, 3600) // 60
-    ss := Mod(left, 60)
-    cnt := Pad2(hh) . ":" . Pad2(mm) . ":" . Pad2(ss)
+    cnt := Pad2(hh) . ":" . Pad2(mm)
     DrawCard()
     FormatTime, today, %now%, yyyyMMdd
     FormatTime, riseDay, %riseToday%, yyyyMMdd
@@ -833,3 +1118,19 @@ Gosub, SavePos
 if (pToken)
     DllCall("gdiplus\GdiplusShutdown", "Ptr", pToken)
 ExitApp
+
+#If OverlayUnderMouse()
+WheelUp::
+SetOverlayScale(UiScale * 1.10)
+return
+WheelDown::
+SetOverlayScale(UiScale / 1.10)
+return
+#If
+
+OverlayUnderMouse()
+{
+    global GuiHwnd
+    MouseGetPos, , , hwnd
+    return (hwnd = GuiHwnd)
+}
